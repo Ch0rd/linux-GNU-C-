@@ -157,18 +157,56 @@ bug:当出现max(i++,j++)时，i和j的值在宏展开时会自增两次，造�
 ```
 
 添加参数type指定临时变量类型，可以比较任意类型的数据。
-### 语句表达式在linux内核中的使用
-语句表达式，作为 GNU C 对 C 标准的一个扩展，在内核的宏定义中，被大量的使用。
-比如在 Linux 内核中，max_t 和 min_t 的宏定义
 
+## 四、关键字typeof
+GNU C扩展了一个关键字typeof，用来获取一个变量或表达式的类型。注意，typeof还没有被写入C标准。
+使用 typeof，可以获取一个变量或表达式的类型。
 ```
-#define min_t(type, x, y) ({            \
-    type __min1 = (x);          \
-    type __min2 = (y);          \
-    __min1 < __min2 ? __min1 : __min2; })
+int i ;
+typeof(i) j = 20;//变量i的类型为int，所以typeof(i)就等于int
 
-#define max_t(type, x, y) ({            \
-    type __max1 = (x);          \
-    type __max2 = (y);          \
-    __max1 > __max2 ? __max1 : __max2; })
+typeof(int *) a;//typeof(int *)就等于int *
+
+int f();
+typeof(f()) k;//表达式f()的类型为int，所以typeof(f())就等于int
 ```
+
+### typeof的高级用法
+```
+typeof (int *) y;  // 把 y 定义为指向 int 类型的指针，相当于int *y;
+typeof (int)  *y;  //定义一个执行 int 类型的指针变量 y
+typeof (*x) y;     //定义一个指针 x 所指向类型 的指针变量y
+typeof (int) y[4]; //相当于定义一个：int y[4]
+typeof (*x) y[4];  //把 y 定义为指针 x 指向的数据类型的数组
+typeof (typeof (char *)[4]) y;//相当于定义字符指针数组：char *y[4];
+typeof(int x[4]) y;//相当于定义：int y[4]
+```
+
+### typeof在linux内核中的应用
+```
+#define min(x, y) ({                \
+    typeof(x) _min1 = (x);          \
+    typeof(y) _min2 = (y);          \
+    (void) (&_min1 == &_min2);      \
+    _min1 < _min2 ? _min1 : _min2; })
+
+#define max(x, y) ({                \
+    typeof(x) _max1 = (x);          \
+    typeof(y) _max2 = (y);          \
+    (void) (&_max1 == &_max2);      \
+    _max1 > _max2 ? _max1 : _max2; })
+```
+
+在 min\max 宏定义中，使用 typeof 直接获取参数类型。
+其中有一行代码
+```
+   (void) (&_max1 == &_max2);
+```
+
+用来检测宏的两个参数 x 和 y 的数据类型是否相同。如果不相同，编译器会给一个警告信息。
+```
+warning：comparison of distinct pointer types lacks a cast
+```
+
+语句 &_max1 == &_max2 用来判断两个变量 _max1 和 _max2的地址是否相等，即比较两个指针是否相等。当两个变量类型不相同时，指针类型也不同。比如一个 int 型变量，一个 char 变量，对应的指针类型，分别为 char * 和 int *，而两个指针比较，它们必须是同种类型的指针，否则编译器会有警告信息。
+而由于比较结果的值并不会用到，编译器也会报警告信息，通过加上(void)将此种警告信息去除。
