@@ -43,7 +43,7 @@ struct goods{
 };
 ```
 
-1.标准c
+### 1.标准c
 
 ```
 struct goods goods1=
@@ -56,7 +56,7 @@ struct goods goods1=
 
 类似数组，标准c在结构体的赋值时也是需要固定顺序赋值。
 
-2.GNU C
+### 2.GNU C
 
 ```
 struct goods goods2=
@@ -213,3 +213,63 @@ warning：comparison of distinct pointer types lacks a cast
 而由于比较结果的值并不会用到，编译器也会报警告信息，通过加上(void)将此种警告信息去除。
 
 ## 五、container of 宏
+```
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#define  container_of(ptr, type, member) ({    \
+     const typeof( ((type *)0)->member ) *__mptr = (ptr); \
+     (type *)( (char *)__mptr - offsetof(type,member) );})
+```
+
+主要作用：根据结构体某一成员的地址，获取这个结构体的首地址。
+
+这个宏有三个参数，它们分别是：
+type：结构体类型
+member：结构体内的成员
+ptr：结构体内成员member的地址
+
+### 使用示例
+```
+struct team
+{
+    int a;
+    int b;
+    int c;
+};
+int main(void)
+{
+    struct team t_one;
+    struct team, *p;
+    p = container_of( &t_one.c, struct team, c);
+    return 0;
+}
+```
+
+Linux 内核驱动中，为了抽象，对数据结构体进行了多次封装，往往一个结构体里面嵌套多层结构体。也就是说，内核驱动中不同层次的子系统或模块，使用的是不同封装程度的结构体。这是面向对象思想。分层、抽象、封装，让程序兼容性更好，适配更多的设备，但同时也增加了代码的复杂度。
+我们在内核中，经常会遇到这种情况：我们传给某个函数的参数是某个结构体的成员变量，然后在这个函数中，可能还会用到此结构体的其它成员变量。通过container_of，我们可以首先找到结构体的首地址，然后再通过结构体的成员访问就可以访问其它成员变量。
+
+###container_of实现
+
+计算结构体成员在结构体内的偏移：
+```
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+```
+
+将0强制转换为一个指向 TYPE 的结构体常量指针，然后通过这个常量指针访问成员，获取成员 MEMBER 的地址，其大小在数值上等于 MEMBER 在结构体 TYPE 中的偏移。
+size_t:unsigned int 无符号整型
+&((TYPE *)0)->MEMBER:MEMBER在TYPE中的偏移
+
+结构体的成员数据类型可以是任意数据类型。为了让宏兼容各种数据类型，定义了一个临时指针变量__mptr，该变量用来存储结构体成员 MEMBER 的地址，即存储 ptr 的值。
+
+```
+const typeof( ((type *)0)->member ) *__mptr = (ptr); \
+```
+
+宏的参数 ptr 代表的是一个结构体成员变量 MEMBER 的地址，所以 ptr 的类型是一个指向 MEMBER 数据类型的指针。当使用临时指针变量__mptr来存储 ptr 的值时，必须确保__mptr 的指针类型是一个指向 MEMBER 类型的指针变量。表达式使用 typeof 关键字，用来获取结构体成员 member 的数据类型。
+
+```
+(type *)( (char *)__mptr - offsetof(type,member) );
+```
+
+结构体成员 member 的地址，减去在结构体 type 中的偏移，结果就是结构体 type 的首地址。结果也是整个语句表达式的值，container_of 最后会返回这个地址值。
+在语句表达式的最后，因为返回的是结构体的首地址，所以数据类型还必须强制转换为 TYPE* ，即返回一个指向 TYPE 结构体类型的指针。
+
